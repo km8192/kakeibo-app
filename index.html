@@ -99,7 +99,9 @@
   .recent-item .ri-left{display:flex;gap:8px;align-items:center;color:var(--sub);}
   .recent-item .ri-amount.expense{color:var(--expense);font-weight:600;}
   .recent-item .ri-amount.income{color:var(--income);font-weight:600;}
-  .undo-btn{border:1px solid var(--border);background:#fff;color:var(--sub);border-radius:8px;padding:4px 10px;font-size:12px;}
+  .undo-btn{border:1px solid var(--border);background:#fff;color:var(--sub);border-radius:8px;padding:4px 10px;font-size:12px;
+    transition:background .1s,color .1s,transform .1s;}
+  .undo-btn.undo-btn-pressed{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(.94);}
 
   /* ===== 共通部品 ===== */
   .bottom-nav{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;display:flex;
@@ -678,7 +680,11 @@ function renderRecentList(){
         ${idx===0 ? '<button class="undo-btn" data-undo>取り消し</button>' : ''}
       </div>`;
     if(idx===0){
-      row.querySelector('[data-undo]').onclick = ()=>{
+      const undoBtn = row.querySelector('[data-undo]');
+      undoBtn.onclick = ()=>{
+        // タップした瞬間に色を変えて「押した感」を出してから取り消し処理に進む
+        undoBtn.classList.add('undo-btn-pressed');
+        setTimeout(()=>{
         const snapshot = cloneTxCache();
         applyOptimisticDelete(t);
         showToast('取り消しました');
@@ -696,6 +702,7 @@ function renderRecentList(){
           renderRecentList();
           renderCategoryGrid();
         });
+        }, 90);
       };
     }
     wrap.appendChild(row);
