@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="家計簿">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root{
@@ -124,7 +124,10 @@
 
   .legend{margin-top:10px;}
   .legend-item{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px dashed var(--border);}
+  .legend-item-tappable{cursor:pointer;}
+  .legend-item-tappable:active{background:var(--accent-bg);}
   .legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
+  .legend-hint-icon{font-size:11px;color:var(--accent);margin-left:4px;}
 
   .kpi-row{display:flex;gap:8px;}
   .kpi{flex:1;background:var(--card);border-radius:12px;padding:10px;text-align:center;}
@@ -364,6 +367,14 @@
   </div>
 </div>
 
+<!-- 光熱費 前年比較オーバーレイ -->
+<div class="overlay" id="overlay-year-compare">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="year-compare-title">前年比較</h3><button data-close>✕</button></div>
+    <canvas id="year-compare-chart" height="220"></canvas>
+  </div>
+</div>
+
 <!-- 予算金額編集オーバーレイ -->
 <div class="overlay" id="overlay-budget">
   <div class="sheet">
@@ -430,9 +441,12 @@
 
 <script>
 /* ================= 共通ユーティリティ ================= */
-const ICONS = ['ti-home','ti-tools-kitchen-2','ti-bus','ti-shopping-cart','ti-users','ti-bolt','ti-dots',
+const ICONS = ['ti-home','ti-tools-kitchen-2','ti-bus','ti-shopping-cart','ti-users','ti-bolt','ti-flame','ti-droplet','ti-dots',
   'ti-cash','ti-gift','ti-heart','ti-medical-cross','ti-plane','ti-device-gamepad-2','ti-shirt','ti-paw',
   'ti-book','ti-coffee','ti-baby-carriage','ti-phone','ti-wifi'];
+
+// 光熱費（季節で変動しやすいカテゴリ）は、集計画面でタップすると前年比較グラフを表示する
+const YEAR_COMPARE_CATEGORIES = ['電気代','ガス代','水道代'];
 
 function yen(n){ return '¥' + Math.round(n||0).toLocaleString('ja-JP'); }
 function pct(n){ return Math.round((n||0)*100) + '%'; }
@@ -848,13 +862,38 @@ function renderPie(){
   const legend = document.getElementById('pie-legend');
   legend.innerHTML = '';
   src.forEach((x,i)=>{
+    const isYearCompare = state.reportTab==='category' && YEAR_COMPARE_CATEGORIES.includes(x.label);
     const row = document.createElement('div');
-    row.className = 'legend-item';
+    row.className = 'legend-item' + (isYearCompare ? ' legend-item-tappable' : '');
     const rate = total>0 ? Math.round(x.amount/total*100) : 0;
-    row.innerHTML = `<span><span class="legend-dot" style="background:${PALETTE[i%PALETTE.length]}"></span>${x.label}</span><span>${yen(x.amount)}（${rate}%）</span>`;
+    row.innerHTML = `<span><span class="legend-dot" style="background:${PALETTE[i%PALETTE.length]}"></span>${x.label}${isYearCompare?' <i class="ti ti-chart-bar legend-hint-icon"></i>':''}</span><span>${yen(x.amount)}（${rate}%）</span>`;
+    if(isYearCompare){
+      row.onclick = ()=>openYearCompareOverlay(x.label);
+    }
     legend.appendChild(row);
   });
   if(src.length===0) legend.innerHTML = '<div class="empty-note">データがありません</div>';
+}
+
+let yearCompareChart = null;
+function openYearCompareOverlay(category){
+  apiCall('getCategoryYearComparison', {category, monthKey: state.reportMonthKey}).then(data=>{
+    document.getElementById('year-compare-title').textContent = `${category}の前年比較（${data.year}年 vs ${data.prevYear}年）`;
+    const ctx = document.getElementById('year-compare-chart');
+    if(yearCompareChart) yearCompareChart.destroy();
+    yearCompareChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.months.map(m=>m.month+'月'),
+        datasets: [
+          { label: data.year+'年（今年）', data: data.months.map(m=>m.current), backgroundColor:'#1f6f76' },
+          { label: data.prevYear+'年（前年）', data: data.months.map(m=>m.previous), backgroundColor:'#a5b1c2' }
+        ]
+      },
+      options: { plugins:{ legend:{ display:true, position:'bottom' } }, scales:{ y:{ beginAtZero:true } } }
+    });
+    document.getElementById('overlay-year-compare').classList.add('show');
+  });
 }
 
 function renderBar(){

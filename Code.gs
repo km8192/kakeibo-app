@@ -87,6 +87,7 @@ function handleRequest(action, params) {
       case 'updateSettings': result = apiUpdateSettings(params); break;
 
       case 'getReport': result = apiGetReport(params); break;
+      case 'getCategoryYearComparison': result = apiGetCategoryYearComparison(params); break;
 
       default:
         throw new Error('不明なaction: ' + action);
@@ -139,7 +140,9 @@ function seedSheet(name, sheet) {
       ['日用品', '支出', 'ti-shopping-cart', 4, 5000],
       ['交際費', '支出', 'ti-users', 5, 5000],
       ['電気代', '支出', 'ti-bolt', 6, ''],
-      ['その他', '支出', 'ti-dots', 7, 5000]
+      ['ガス代', '支出', 'ti-flame', 7, ''],
+      ['水道代', '支出', 'ti-droplet', 8, ''],
+      ['その他', '支出', 'ti-dots', 9, 5000]
     ];
     var income = [
       ['給与', '収入', 'ti-cash', 1, ''],
@@ -857,4 +860,34 @@ function apiGetReport(p) {
     byPaymentMethod: groupBy('支払い方法'),
     dailyTrend: dailyTrend
   };
+}
+
+// ===== カテゴリ別の前年比較（光熱費など季節変動のあるカテゴリ向け） =====
+
+function sumCategoryForMonth(category, monthKey, closingDay) {
+  var range = fiscalMonthRangeForKey(monthKey, closingDay);
+  var total = 0;
+  getSheetData(SHEETS.TRANSACTIONS).rows.forEach(function (r) {
+    if (r['カテゴリ'] !== category || r['種別'] !== '支出') return;
+    var d = new Date(r['日付']);
+    if (d.getTime() >= range.startDate.getTime() && d.getTime() <= range.endDate.getTime()) {
+      total += Number(r['金額']) || 0;
+    }
+  });
+  return total;
+}
+
+function apiGetCategoryYearComparison(p) {
+  var closingDay = getClosingDay();
+  var baseKey = p.monthKey || getFiscalMonth(new Date(), closingDay).key;
+  var baseYear = Number(baseKey.split('-')[0]);
+  var months = [];
+  for (var m = 1; m <= 12; m++) {
+    months.push({
+      month: m,
+      current: sumCategoryForMonth(p.category, fmtYm(baseYear, m), closingDay),
+      previous: sumCategoryForMonth(p.category, fmtYm(baseYear - 1, m), closingDay)
+    });
+  }
+  return { category: p.category, year: baseYear, prevYear: baseYear - 1, months: months };
 }
