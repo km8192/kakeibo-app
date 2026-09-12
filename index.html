@@ -65,11 +65,15 @@
   .type-toggle button.active.expense{background:var(--expense-bg);color:var(--expense);}
   .type-toggle button.active.income{background:var(--income-bg);color:var(--income);}
 
-  .amount-display{text-align:center;margin:16px 0 6px;}
+  .amount-row{display:flex;align-items:center;justify-content:center;gap:16px;margin:16px 0 6px;}
+  .amount-display{text-align:center;flex:1;}
   .amount-display .yen{font-size:20px;color:var(--sub);margin-right:4px;}
   .amount-display .num{font-size:40px;font-weight:700;}
   .amount-display.expense .num{color:var(--expense);}
   .amount-display.income .num{color:var(--income);}
+  .confirm-btn{flex:0 0 auto;padding:16px 20px;border:none;border-radius:12px;background:var(--accent);
+    color:#fff;font-size:16px;font-weight:700;}
+  .confirm-btn:active{opacity:.85;}
   .amount-error{text-align:center;color:var(--warn);font-size:13px;height:18px;}
 
   .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
@@ -223,8 +227,11 @@
       <button data-type="収入" class="income">収入</button>
     </div>
 
-    <div class="amount-display expense" id="amount-display">
-      <span class="yen">¥</span><span class="num" id="amount-num">0</span>
+    <div class="amount-row">
+      <div class="amount-display expense" id="amount-display">
+        <span class="yen">¥</span><span class="num" id="amount-num">0</span>
+      </div>
+      <button class="confirm-btn" id="confirm-btn" type="button">確定</button>
     </div>
     <div class="amount-error" id="amount-error"></div>
 
@@ -234,9 +241,6 @@
       <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
       <button data-k="00">00</button><button data-k="0">0</button><button data-k="back" class="del"><i class="ti ti-backspace"></i></button>
     </div>
-
-    <h2 class="section-title">カテゴリ（タップで保存）</h2>
-    <div class="category-grid" id="category-grid"></div>
 
     <div class="recent-list" id="recent-list"></div>
   </main>
@@ -359,6 +363,14 @@
     <button data-screen="report"><i class="ti ti-chart-pie"></i>集計</button>
     <button data-screen="settings"><i class="ti ti-settings"></i>設定</button>
   </nav>
+</div>
+
+<!-- カテゴリ選択オーバーレイ（「確定」ボタンから開く） -->
+<div class="overlay" id="overlay-category-select">
+  <div class="sheet">
+    <div class="sheet-head"><h3>カテゴリを選択（タップで保存）</h3><button data-close>✕</button></div>
+    <div class="category-grid" id="category-grid"></div>
+  </div>
 </div>
 
 <!-- 予算 週別内訳オーバーレイ -->
@@ -681,6 +693,21 @@ function reloadInputMonth(){
   });
 }
 
+function openCategoryOverlay(){
+  const amount = Number(state.amount);
+  const errEl = document.getElementById('amount-error');
+  if(!amount || amount<=0){
+    errEl.textContent = '金額を入力してください';
+    return;
+  }
+  errEl.textContent = '';
+  if(!state.selMember || !state.selPayment){
+    showToast('「誰が」と「支払い方法」を選択してください');
+    return;
+  }
+  document.getElementById('overlay-category-select').classList.add('show');
+}
+
 function saveTransaction(category){
   const amount = Number(state.amount);
   const errEl = document.getElementById('amount-error');
@@ -707,6 +734,7 @@ function saveTransaction(category){
     state.amount = '0';
     document.getElementById('amount-num').textContent = '0';
     state.txCache.summary = res.summary;
+    document.getElementById('overlay-category-select').classList.remove('show');
     reloadInputMonth();
     if(state.historyMonthKey===state.inputMonthKey) loadHistory();
   });
@@ -1135,6 +1163,8 @@ function bindEvents(){
     document.getElementById('amount-num').textContent = Number(state.amount).toLocaleString('ja-JP');
     document.getElementById('amount-error').textContent = '';
   };
+
+  document.getElementById('confirm-btn').onclick = openCategoryOverlay;
 
   document.getElementById('hist-prev').onclick = ()=>{ state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,-1); loadHistory(); };
   document.getElementById('hist-next').onclick = ()=>{ state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,1); loadHistory(); };
