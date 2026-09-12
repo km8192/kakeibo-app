@@ -82,6 +82,8 @@
   .keypad button:active{background:var(--border);}
   .keypad button.del{color:var(--sub);}
 
+  .memo-input{width:100%;box-sizing:border-box;border:1px solid var(--border);background:var(--card);color:var(--text);
+    font-size:14px;padding:9px 12px;border-radius:10px;margin-bottom:12px;}
   .category-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
   .cat-btn{display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--card);border:none;
     border-radius:14px;padding:10px 4px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05);
@@ -374,6 +376,7 @@
 <div class="overlay" id="overlay-category-select">
   <div class="sheet">
     <div class="sheet-head"><h3>カテゴリを選択（タップで保存）</h3><button data-close>✕</button></div>
+    <input type="text" id="tx-memo" class="memo-input" placeholder="メモ（任意）：お店の名前など" maxlength="100">
     <div class="category-grid" id="category-grid"></div>
   </div>
 </div>
@@ -772,6 +775,7 @@ function openCategoryOverlay(){
     return;
   }
   loadAverageHints();
+  document.getElementById('tx-memo').value = '';
   document.getElementById('overlay-category-select').classList.add('show');
 }
 
@@ -787,6 +791,7 @@ function saveTransaction(category){
     showToast('「誰が」と「支払い方法」を選択してください');
     return;
   }
+  const memo = document.getElementById('tx-memo').value.trim();
   const payload = {
     date: document.getElementById('tx-date').value || todayStr(),
     type: state.selType,
@@ -794,7 +799,7 @@ function saveTransaction(category){
     paymentMethod: state.selPayment,
     category: category,
     amount: amount,
-    memo: ''
+    memo: memo
   };
 
   // サーバーの返事を待たずに画面を先に更新する（保存に失敗した場合だけ元に戻す）
