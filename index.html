@@ -548,7 +548,6 @@ function boot(){
     renderCategoryGrid();
     renderSummary();
     renderRecentList();
-    loadAverageHints();
   });
   bindEvents();
 }
@@ -561,7 +560,7 @@ function renderMemberChips(){
     const b = document.createElement('button');
     b.className = 'chip' + (state.selMember===m.name ? ' selected':'');
     b.textContent = m.name;
-    b.onclick = ()=>{ state.selMember = m.name; localStorage.setItem('kakeibo_last_member', m.name); renderMemberChips(); loadAverageHints(); };
+    b.onclick = ()=>{ state.selMember = m.name; localStorage.setItem('kakeibo_last_member', m.name); renderMemberChips(); };
     wrap.appendChild(b);
   });
   if(!state.selMember && state.masters.members[0]) state.selMember = state.masters.members[0].name;
@@ -625,12 +624,13 @@ function renderCategoryGrid(){
 
 function loadAverageHints(){
   if(!state.selMember) return;
-  document.querySelectorAll('.cat-avg').forEach(el=>{
-    const cat = el.dataset.cat;
-    apiCall('getAverageAmount', {member: state.selMember, category: cat}).then(res=>{
-      el.textContent = res.count>0 ? ('平均 '+yen(res.average)) : '';
-    }).catch(()=>{});
-  });
+  // カテゴリごとに毎回通信すると遅くなるため、1回の通信でまとめて取得する
+  apiCall('getAverageAmountsForMember', {member: state.selMember, type: state.selType}).then(map=>{
+    document.querySelectorAll('.cat-avg').forEach(el=>{
+      const info = map[el.dataset.cat];
+      el.textContent = (info && info.count>0) ? ('平均 '+yen(info.average)) : '';
+    });
+  }).catch(()=>{});
 }
 
 function renderSummary(){
@@ -689,7 +689,6 @@ function reloadInputMonth(){
     renderSummary();
     renderRecentList();
     renderCategoryGrid();
-    loadAverageHints();
   });
 }
 
@@ -705,6 +704,7 @@ function openCategoryOverlay(){
     showToast('「誰が」と「支払い方法」を選択してください');
     return;
   }
+  loadAverageHints();
   document.getElementById('overlay-category-select').classList.add('show');
 }
 
@@ -1146,7 +1146,6 @@ function bindEvents(){
     document.querySelectorAll('#type-toggle button').forEach(b=>b.classList.toggle('active', b===btn));
     document.getElementById('amount-display').className = 'amount-display ' + (state.selType==='支出'?'expense':'income');
     renderCategoryGrid();
-    loadAverageHints();
   };
 
   document.getElementById('keypad').onclick = (e)=>{

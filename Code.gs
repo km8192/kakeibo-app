@@ -78,6 +78,7 @@ function handleRequest(action, params) {
       case 'reorderFixedCosts': result = apiReorderFixedCosts(params); break;
 
       case 'getAverageAmount': result = apiGetAverageAmount(params); break;
+      case 'getAverageAmountsForMember': result = apiGetAverageAmountsForMember(params); break;
 
       case 'getMonthlyBudget': result = apiGetMonthlyBudget(params); break;
       case 'setMonthlyBudget': result = apiSetMonthlyBudget(params); break;
@@ -718,6 +719,25 @@ function apiGetAverageAmount(p) {
   var sum = 0;
   rows.forEach(function (r) { sum += Number(r['金額']) || 0; });
   return { average: Math.round(sum / rows.length), count: rows.length };
+}
+
+// カテゴリボタンの数だけ通信するとApps Scriptの応答が遅くなるため、
+// 誰が×種別を指定して、対象カテゴリすべての平均額を1回の通信でまとめて返す
+function apiGetAverageAmountsForMember(p) {
+  var rows = getSheetData(SHEETS.TRANSACTIONS).rows.filter(function (r) {
+    return r['誰が'] === p.member && r['種別'] === (p.type || '支出');
+  });
+  var sums = {}, counts = {};
+  rows.forEach(function (r) {
+    var cat = r['カテゴリ'];
+    sums[cat] = (sums[cat] || 0) + (Number(r['金額']) || 0);
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+  var result = {};
+  Object.keys(counts).forEach(function (cat) {
+    result[cat] = { average: Math.round(sums[cat] / counts[cat]), count: counts[cat] };
+  });
+  return result;
 }
 
 // ===== 今月の予算（ざっくり） =====
