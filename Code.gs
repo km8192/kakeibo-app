@@ -479,7 +479,8 @@ function apiAddTransaction(p) {
 
   var closingDay = getClosingDay();
   var monthKey = getFiscalMonth(p.date, closingDay).key;
-  return { id: id, summary: computeSummaryForMonth(monthKey) };
+  // 画面の再描画に必要な情報をまとめて返し、保存直後にもう一度通信しなくて済むようにする
+  return { id: id, transactions: apiGetTransactions({ monthKey: monthKey }) };
 }
 
 function applyFixedCostAutoUpdate(category, member, amount) {
@@ -512,7 +513,7 @@ function apiUpdateTransaction(p) {
   });
   var closingDay = getClosingDay();
   var monthKey = getFiscalMonth(p.date, closingDay).key;
-  return { summary: computeSummaryForMonth(monthKey) };
+  return { transactions: apiGetTransactions({ monthKey: monthKey }) };
 }
 
 function apiDeleteTransaction(p) {
@@ -522,7 +523,7 @@ function apiDeleteTransaction(p) {
   var closingDay = getClosingDay();
   var monthKey = getFiscalMonth(row['日付'], closingDay).key;
   deleteRowByRowNumber(SHEETS.TRANSACTIONS, row.__row);
-  return { summary: computeSummaryForMonth(monthKey) };
+  return { transactions: apiGetTransactions({ monthKey: monthKey }) };
 }
 
 // ===== マスタ一括取得 =====

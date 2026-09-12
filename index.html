@@ -674,21 +674,14 @@ function renderRecentList(){
       row.querySelector('[data-undo]').onclick = ()=>{
         apiCall('deleteTransaction', {id:t.id}).then(res=>{
           showToast('取り消しました');
-          state.txCache.summary = res.summary;
-          reloadInputMonth();
+          state.txCache = res.transactions;
+          renderSummary();
+          renderRecentList();
+          renderCategoryGrid();
         });
       };
     }
     wrap.appendChild(row);
-  });
-}
-
-function reloadInputMonth(){
-  apiCall('getTransactions', {monthKey: state.inputMonthKey}).then(data=>{
-    state.txCache = data;
-    renderSummary();
-    renderRecentList();
-    renderCategoryGrid();
   });
 }
 
@@ -733,10 +726,11 @@ function saveTransaction(category){
     showToast('保存しました');
     state.amount = '0';
     document.getElementById('amount-num').textContent = '0';
-    state.txCache.summary = res.summary;
+    state.txCache = res.transactions;
+    renderSummary();
+    renderRecentList();
+    renderCategoryGrid();
     document.getElementById('overlay-category-select').classList.remove('show');
-    reloadInputMonth();
-    if(state.historyMonthKey===state.inputMonthKey) loadHistory();
   });
 }
 
@@ -1255,20 +1249,26 @@ function bindEvents(){
       amount: Number(document.getElementById('edit-amount').value),
       memo: document.getElementById('edit-memo').value
     };
-    apiCall('updateTransaction', payload).then(()=>{
+    apiCall('updateTransaction', payload).then(res=>{
       document.getElementById('overlay-tx-edit').classList.remove('show');
       showToast('更新しました');
       loadHistory();
-      if(state.inputMonthKey===state.historyMonthKey) reloadInputMonth();
+      if(res.transactions.monthKey===state.inputMonthKey){
+        state.txCache = res.transactions;
+        renderSummary(); renderRecentList(); renderCategoryGrid();
+      }
     });
   };
   document.getElementById('edit-delete-btn').onclick = ()=>{
     if(!confirm('この記録を削除しますか？')) return;
-    apiCall('deleteTransaction', {id: state.editingTxId}).then(()=>{
+    apiCall('deleteTransaction', {id: state.editingTxId}).then(res=>{
       document.getElementById('overlay-tx-edit').classList.remove('show');
       showToast('削除しました');
       loadHistory();
-      if(state.inputMonthKey===state.historyMonthKey) reloadInputMonth();
+      if(res.transactions.monthKey===state.inputMonthKey){
+        state.txCache = res.transactions;
+        renderSummary(); renderRecentList(); renderCategoryGrid();
+      }
     });
   };
   document.getElementById('edit-type').onchange = ()=>{
