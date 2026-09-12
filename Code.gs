@@ -45,6 +45,7 @@ function doPost(e) {
 }
 
 function handleRequest(action, params) {
+  _sheetDataCache = {}; // 1リクエストの中で同じシートを何度も読み直さないためのキャッシュ
   ensureSheets();
   var result;
   try {
@@ -106,6 +107,10 @@ function jsonResponse(obj) {
 // ===== 初期化（シート作成・シード投入） =====
 
 function ensureSheets() {
+  // 初期化済みなら、毎回シートの有無を確認する重い処理は丸ごとスキップする
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('sheetsInitialized') === 'true') return;
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   Object.keys(HEADERS).forEach(function (name) {
@@ -125,18 +130,16 @@ function ensureSheets() {
     }
   });
 
-  // 「年月」列の書式固定（毎回実行すると重いため、スクリプトプロパティで一度だけ行うようにする）
-  var props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('monthlyBudgetColumnFormatted')) {
-    ss.getSheetByName(SHEETS.MONTHLY_BUDGET).getRange('A2:A1000').setNumberFormat('@');
-    props.setProperty('monthlyBudgetColumnFormatted', 'true');
-  }
+  // 「年月」列がスプレッドシート側で日付型に自動変換されないよう、プレーンテキスト形式に固定する
+  ss.getSheetByName(SHEETS.MONTHLY_BUDGET).getRange('A2:A1000').setNumberFormat('@');
 
   // デフォルトシート「シート1」が残っていれば削除（新規スプレッドシートの初期化時のみ）
   var defaultSheet = ss.getSheetByName('シート1');
   if (defaultSheet && ss.getSheets().length > 1) {
     ss.deleteSheet(defaultSheet);
   }
+
+  props.setProperty('sheetsInitialized', 'true');
 }
 
 function seedSheet(name, sheet) {
@@ -181,7 +184,12 @@ function generateId(prefix) {
 
 // ===== シート読み書き共通ヘルパー =====
 
+// 1回のAPI呼び出しの中で同じシートを何度も読み直すと遅くなるため、リクエスト単位でキャッシュする
+// （handleRequestの先頭で毎回空にしているので、リクエストをまたいで古いデータが残ることはない）
+var _sheetDataCache = {};
+
 function getSheetData(sheetName) {
+  if (_sheetDataCache[sheetName]) return _sheetDataCache[sheetName];
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
   var values = sheet.getDataRange().getValues();
@@ -195,7 +203,9 @@ function getSheetData(sheetName) {
     obj.__row = i + 1;
     rows.push(obj);
   }
-  return { sheet: sheet, headers: headers, rows: rows };
+  var data = { sheet: sheet, headers: headers, rows: rows };
+  _sheetDataCache[sheetName] = data;
+  return data;
 }
 
 function appendRowByHeaders(sheetName, obj) {
@@ -204,6 +214,7 @@ function appendRowByHeaders(sheetName, obj) {
     return obj[h] !== undefined ? obj[h] : '';
   });
   data.sheet.appendRow(row);
+  delete _sheetDataCache[sheetName];
   return row;
 }
 
@@ -213,11 +224,13 @@ function updateRowByHeaders(sheetName, rowNumber, obj) {
     return obj[h] !== undefined ? obj[h] : '';
   });
   data.sheet.getRange(rowNumber, 1, 1, data.headers.length).setValues([row]);
+  delete _sheetDataCache[sheetName];
 }
 
 function deleteRowByRowNumber(sheetName, rowNumber) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.getSheetByName(sheetName).deleteRow(rowNumber);
+  delete _sheetDataCache[sheetName];
 }
 
 function findRowById(rows, id) {
