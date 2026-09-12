@@ -208,22 +208,29 @@ function getSheetData(sheetName) {
   return data;
 }
 
+// 項目名（ヘッダー）はHEADERS定数で分かっているため、書き込み専用の処理では
+// シートの全データを読み込まずにシート参照だけを取得する（履歴が増えても遅くならないように）
+function getSheetRef(sheetName) {
+  if (_sheetDataCache[sheetName]) return _sheetDataCache[sheetName].sheet;
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+}
+
 function appendRowByHeaders(sheetName, obj) {
-  var data = getSheetData(sheetName);
-  var row = data.headers.map(function (h) {
+  var headers = HEADERS[sheetName];
+  var row = headers.map(function (h) {
     return obj[h] !== undefined ? obj[h] : '';
   });
-  data.sheet.appendRow(row);
+  getSheetRef(sheetName).appendRow(row);
   delete _sheetDataCache[sheetName];
   return row;
 }
 
 function updateRowByHeaders(sheetName, rowNumber, obj) {
-  var data = getSheetData(sheetName);
-  var row = data.headers.map(function (h) {
+  var headers = HEADERS[sheetName];
+  var row = headers.map(function (h) {
     return obj[h] !== undefined ? obj[h] : '';
   });
-  data.sheet.getRange(rowNumber, 1, 1, data.headers.length).setValues([row]);
+  getSheetRef(sheetName).getRange(rowNumber, 1, 1, headers.length).setValues([row]);
   delete _sheetDataCache[sheetName];
 }
 
