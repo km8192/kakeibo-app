@@ -123,11 +123,14 @@ function ensureSheets() {
     if (isNew) {
       seedSheet(name, sheet);
     }
-    if (name === SHEETS.MONTHLY_BUDGET) {
-      // 「年月」列（例:"2026-09"）がスプレッドシート側で日付型に自動変換されないよう、プレーンテキスト形式に固定する
-      sheet.getRange('A2:A1000').setNumberFormat('@');
-    }
   });
+
+  // 「年月」列の書式固定（毎回実行すると重いため、スクリプトプロパティで一度だけ行うようにする）
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('monthlyBudgetColumnFormatted')) {
+    ss.getSheetByName(SHEETS.MONTHLY_BUDGET).getRange('A2:A1000').setNumberFormat('@');
+    props.setProperty('monthlyBudgetColumnFormatted', 'true');
+  }
 
   // デフォルトシート「シート1」が残っていれば削除（新規スプレッドシートの初期化時のみ）
   var defaultSheet = ss.getSheetByName('シート1');
