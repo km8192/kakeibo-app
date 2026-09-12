@@ -122,6 +122,10 @@ function ensureSheets() {
     if (isNew) {
       seedSheet(name, sheet);
     }
+    if (name === SHEETS.MONTHLY_BUDGET) {
+      // 「年月」列（例:"2026-09"）がスプレッドシート側で日付型に自動変換されないよう、プレーンテキスト形式に固定する
+      sheet.getRange('A2:A1000').setNumberFormat('@');
+    }
   });
 
   // デフォルトシート「シート1」が残っていれば削除（新規スプレッドシートの初期化時のみ）
@@ -249,6 +253,15 @@ function fmtYm(y, m) {
   return y + '-' + (m < 10 ? '0' + m : String(m));
 }
 
+// スプレッドシート側が「年月」列（例："2026-09"）を日付型に自動変換してしまうことがあるため、
+// Dateで返ってきた場合でも文字列キーに正規化してから比較する
+function normalizeYearMonthKey(value) {
+  if (value instanceof Date) {
+    return fmtYm(value.getFullYear(), value.getMonth() + 1);
+  }
+  return String(value);
+}
+
 // 指定した日付が属する会計月（年月キー・開始日・終了日）を返す
 function getFiscalMonth(dateInput, closingDay) {
   var date = new Date(dateInput);
@@ -338,7 +351,7 @@ function computeSummaryForMonth(monthKey) {
   var availableBalance = income - fixedCostTotal;
 
   var variableExpense = computeVariableExpense(txRows);
-  var budgetRow = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return r['年月'] === monthKey; })[0];
+  var budgetRow = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return normalizeYearMonthKey(r['年月']) === monthKey; })[0];
   var budgetAmount = budgetRow ? Number(budgetRow['金額']) || 0 : 0;
 
   return {
@@ -711,13 +724,13 @@ function apiGetAverageAmount(p) {
 
 function apiGetMonthlyBudget(p) {
   var monthKey = p.monthKey;
-  var row = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return r['年月'] === monthKey; })[0];
+  var row = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return normalizeYearMonthKey(r['年月']) === monthKey; })[0];
   return { monthKey: monthKey, amount: row ? Number(row['金額']) || 0 : null, summary: computeSummaryForMonth(monthKey) };
 }
 
 function apiSetMonthlyBudget(p) {
   var data = getSheetData(SHEETS.MONTHLY_BUDGET);
-  var row = data.rows.filter(function (r) { return r['年月'] === p.monthKey; })[0];
+  var row = data.rows.filter(function (r) { return normalizeYearMonthKey(r['年月']) === p.monthKey; })[0];
   var amount = Number(p.amount) || 0;
   if (row) {
     updateRowByHeaders(SHEETS.MONTHLY_BUDGET, row.__row, { '年月': p.monthKey, '金額': amount });
@@ -733,7 +746,7 @@ function apiGetWeeklyBreakdown(p) {
   var closingDay = getClosingDay();
   var monthKey = p.monthKey;
   var range = fiscalMonthRangeForKey(monthKey, closingDay);
-  var budgetRow = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return r['年月'] === monthKey; })[0];
+  var budgetRow = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return normalizeYearMonthKey(r['年月']) === monthKey; })[0];
   var budgetAmount = budgetRow ? Number(budgetRow['金額']) || 0 : 0;
 
   var totalDays = Math.round((range.endDate - range.startDate) / 86400000) + 1;
