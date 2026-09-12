@@ -84,11 +84,14 @@
 
   .category-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
   .cat-btn{display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--card);border:none;
-    border-radius:14px;padding:10px 4px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05);}
-  .cat-btn i{font-size:22px;color:var(--accent);}
-  .cat-btn .cat-name{font-size:12px;color:var(--text);}
+    border-radius:14px;padding:10px 4px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05);
+    transition:background .1s,transform .1s;}
+  .cat-btn i{font-size:22px;color:var(--accent);transition:color .1s;}
+  .cat-btn .cat-name{font-size:12px;color:var(--text);transition:color .1s;}
   .cat-btn .cat-avg{font-size:10px;color:var(--sub);min-height:12px;}
   .cat-btn:active{background:var(--border);}
+  .cat-btn.cat-btn-pressed{background:var(--accent);transform:scale(.94);}
+  .cat-btn.cat-btn-pressed i,.cat-btn.cat-btn-pressed .cat-name{color:#fff;}
 
   .recent-list{margin-top:16px;}
   .recent-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);
@@ -617,7 +620,11 @@ function renderCategoryGrid(){
     const b = document.createElement('button');
     b.className = 'cat-btn';
     b.innerHTML = `<i class="ti ${c.icon}"></i><span class="cat-name">${c.name}</span><span class="cat-avg" data-cat="${c.name}"></span>`;
-    b.onclick = ()=>saveTransaction(c.name);
+    b.onclick = ()=>{
+      // タップした瞬間に色を変えて「押した感」を出してから保存処理に進む
+      b.classList.add('cat-btn-pressed');
+      setTimeout(()=>saveTransaction(c.name), 90);
+    };
     wrap.appendChild(b);
   });
 }
