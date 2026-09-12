@@ -672,9 +672,19 @@ function renderRecentList(){
       </div>`;
     if(idx===0){
       row.querySelector('[data-undo]').onclick = ()=>{
+        const snapshot = cloneTxCache();
+        applyOptimisticDelete(t);
+        showToast('取り消しました');
+        renderSummary();
+        renderRecentList();
+        renderCategoryGrid();
         apiCall('deleteTransaction', {id:t.id}).then(res=>{
-          showToast('取り消しました');
           state.txCache = res.transactions;
+          renderSummary();
+          renderRecentList();
+          renderCategoryGrid();
+        }).catch(()=>{
+          state.txCache = snapshot;
           renderSummary();
           renderRecentList();
           renderCategoryGrid();
@@ -683,6 +693,56 @@ function renderRecentList(){
     }
     wrap.appendChild(row);
   });
+}
+
+// 保存・取り消しの体感速度を上げるため、サーバーの返事を待たずに画面（残高・履歴）を先に更新する。
+// 実際の保存に失敗した場合だけ、このスナップショットに戻す。
+function cloneTxCache(){
+  return JSON.parse(JSON.stringify(state.txCache));
+}
+
+function applyOptimisticAdd(payload, tempId){
+  const s = state.txCache.summary;
+  if(!s) return;
+  const amt = payload.amount;
+  if(payload.type==='収入'){
+    s.income += amt;
+    s.balance += amt;
+    s.availableBalance += amt;
+  } else {
+    s.expense += amt;
+    s.balance -= amt;
+    if(s.budget.amount>0){
+      s.budget.used += amt;
+      s.budget.remaining = s.budget.amount - s.budget.used;
+      s.budget.usageRate = s.budget.used / s.budget.amount;
+    }
+  }
+  state.txCache.list.unshift({
+    id: tempId, date: payload.date, type: payload.type, member: payload.member,
+    paymentMethod: payload.paymentMethod, category: payload.category,
+    amount: amt, memo: payload.memo || ''
+  });
+}
+
+function applyOptimisticDelete(tx){
+  const s = state.txCache.summary;
+  if(s){
+    if(tx.type==='収入'){
+      s.income -= tx.amount;
+      s.balance -= tx.amount;
+      s.availableBalance -= tx.amount;
+    } else {
+      s.expense -= tx.amount;
+      s.balance += tx.amount;
+      if(s.budget.amount>0){
+        s.budget.used = Math.max(0, s.budget.used - tx.amount);
+        s.budget.remaining = s.budget.amount - s.budget.used;
+        s.budget.usageRate = s.budget.used / s.budget.amount;
+      }
+    }
+  }
+  state.txCache.list = state.txCache.list.filter(t=>t.id!==tx.id);
 }
 
 function openCategoryOverlay(){
@@ -722,15 +782,31 @@ function saveTransaction(category){
     amount: amount,
     memo: ''
   };
+
+  // サーバーの返事を待たずに画面を先に更新する（保存に失敗した場合だけ元に戻す）
+  const snapshot = cloneTxCache();
+  const tempId = 'temp_' + Date.now();
+  applyOptimisticAdd(payload, tempId);
+  showToast('保存しました');
+  state.amount = '0';
+  document.getElementById('amount-num').textContent = '0';
+  renderSummary();
+  renderRecentList();
+  renderCategoryGrid();
+  document.getElementById('overlay-category-select').classList.remove('show');
+
   apiCall('addTransaction', payload).then(res=>{
-    showToast('保存しました');
-    state.amount = '0';
-    document.getElementById('amount-num').textContent = '0';
     state.txCache = res.transactions;
     renderSummary();
     renderRecentList();
     renderCategoryGrid();
-    document.getElementById('overlay-category-select').classList.remove('show');
+  }).catch(()=>{
+    state.txCache = snapshot;
+    state.amount = String(amount);
+    document.getElementById('amount-num').textContent = state.amount;
+    renderSummary();
+    renderRecentList();
+    renderCategoryGrid();
   });
 }
 
