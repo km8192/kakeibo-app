@@ -33,6 +33,7 @@
   html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;}
   #app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);
+    padding-top:env(safe-area-inset-top);
     padding-bottom:calc(64px + env(safe-area-inset-bottom));}
   .screen{display:none;flex:1;padding:12px 14px 90px;}
   .screen.active{display:block;}
