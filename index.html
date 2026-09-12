@@ -672,9 +672,10 @@ function renderRecentList(){
       </div>`;
     if(idx===0){
       row.querySelector('[data-undo]').onclick = ()=>{
+        const _t0 = performance.now(); // 動作確認用：タップから画面更新までの実測時間
         const snapshot = cloneTxCache();
         applyOptimisticDelete(t);
-        showToast('取り消しました');
+        showToast('取り消しました（' + Math.round(performance.now()-_t0) + 'ms）');
         renderSummary();
         renderRecentList();
         renderCategoryGrid();
@@ -762,6 +763,7 @@ function openCategoryOverlay(){
 }
 
 function saveTransaction(category){
+  const _t0 = performance.now(); // 動作確認用：タップから画面更新までの実測時間
   const amount = Number(state.amount);
   const errEl = document.getElementById('amount-error');
   if(!amount || amount<=0){
@@ -787,7 +789,7 @@ function saveTransaction(category){
   const snapshot = cloneTxCache();
   const tempId = 'temp_' + Date.now();
   applyOptimisticAdd(payload, tempId);
-  showToast('保存しました');
+  showToast('保存しました（' + Math.round(performance.now()-_t0) + 'ms）');
   state.amount = '0';
   document.getElementById('amount-num').textContent = '0';
   renderSummary();
