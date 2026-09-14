@@ -47,6 +47,7 @@ function doPost(e) {
 function handleRequest(action, params) {
   _sheetDataCache = {}; // 1リクエストの中で同じシートを何度も読み直さないためのキャッシュ
   ensureSheets();
+  preloadSheetsBatch();
   var result;
   try {
     switch (action) {
@@ -211,8 +212,42 @@ function getSheetData(sheetName) {
 // 項目名（ヘッダー）はHEADERS定数で分かっているため、書き込み専用の処理では
 // シートの全データを読み込まずにシート参照だけを取得する（履歴が増えても遅くならないように）
 function getSheetRef(sheetName) {
-  if (_sheetDataCache[sheetName]) return _sheetDataCache[sheetName].sheet;
+  if (_sheetDataCache[sheetName] && _sheetDataCache[sheetName].sheet) return _sheetDataCache[sheetName].sheet;
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+}
+
+// 日付を含まないシートは、Sheets API（拡張サービス）のbatchGetで1回の通信にまとめて読み込む。
+// 「取引」シートだけは日付列の型の扱いが変わってしまうリスクがあるため、対象に含めず
+// 従来通りSpreadsheetAppで個別に読み込む（getSheetDataのフォールバックに任せる）。
+// 拡張サービス「Sheets API」が未有効化の環境でも壊れないよう、失敗時は何もせず
+// 通常の個別読み込みにフォールバックする。
+var BATCHABLE_SHEETS = [SHEETS.CATEGORIES, SHEETS.MEMBERS, SHEETS.PAYMENT_METHODS, SHEETS.FIXED_COSTS, SHEETS.MONTHLY_BUDGET, SHEETS.SETTINGS];
+
+function preloadSheetsBatch() {
+  try {
+    var ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    var res = Sheets.Spreadsheets.Values.batchGet(ssId, {
+      ranges: BATCHABLE_SHEETS,
+      valueRenderOption: 'UNFORMATTED_VALUE'
+    });
+    res.valueRanges.forEach(function (vr, idx) {
+      var name = BATCHABLE_SHEETS[idx];
+      var values = vr.values || [];
+      var headers = HEADERS[name];
+      var rows = [];
+      for (var i = 1; i < values.length; i++) {
+        var obj = {};
+        for (var j = 0; j < headers.length; j++) {
+          obj[headers[j]] = values[i][j] !== undefined ? values[i][j] : '';
+        }
+        obj.__row = i + 1;
+        rows.push(obj);
+      }
+      _sheetDataCache[name] = { sheet: null, headers: headers, rows: rows };
+    });
+  } catch (err) {
+    // Sheets APIが未有効化などの場合はここで何もしない（各APIが必要な時に個別に読みに行く）
+  }
 }
 
 function appendRowByHeaders(sheetName, obj) {
@@ -778,9 +813,14 @@ function apiSetMonthlyBudget(p) {
   var amount = Number(p.amount) || 0;
   if (row) {
     updateRowByHeaders(SHEETS.MONTHLY_BUDGET, row.__row, { '年月': p.monthKey, '金額': amount });
+    row['金額'] = amount;
   } else {
     appendRowByHeaders(SHEETS.MONTHLY_BUDGET, { '年月': p.monthKey, '金額': amount });
+    data.rows.push({ '年月': p.monthKey, '金額': amount, __row: data.rows.length + 2 });
   }
+  // 書き込み直後にもう一度シートを読み直さずに済むよう、メモリ上のキャッシュを更新済みの内容で復元する
+  // （updateRowByHeaders/appendRowByHeadersが書き込み後にキャッシュを削除するため）
+  _sheetDataCache[SHEETS.MONTHLY_BUDGET] = data;
   return { monthKey: p.monthKey, amount: amount, summary: computeSummaryForMonth(p.monthKey) };
 }
 
