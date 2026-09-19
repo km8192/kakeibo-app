@@ -113,7 +113,10 @@
   .bottom-nav button.active{color:var(--accent);font-weight:700;}
 
   .top-month-nav{display:flex;align-items:center;justify-content:center;gap:14px;padding:6px 0 12px;}
-  .top-month-nav button{border:none;background:var(--card);width:32px;height:32px;border-radius:50%;font-size:16px;color:var(--accent);}
+  .top-month-nav button{border:none;background:var(--card);width:32px;height:32px;border-radius:50%;font-size:16px;color:var(--accent);
+    transition:background .1s,opacity .1s;}
+  .top-month-nav button:active{background:var(--border);}
+  .top-month-nav button:disabled{opacity:.4;}
   .top-month-nav .month-label{font-size:16px;font-weight:700;}
 
   .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);}
@@ -173,6 +176,7 @@
   .btn.primary{background:var(--accent);color:#fff;}
   .btn.danger{background:#fff;color:var(--warn);border:1px solid var(--warn);}
   .btn.ghost{background:#fff;color:var(--sub);border:1px solid var(--border);}
+  .btn.btn-saving{opacity:.55;cursor:not-allowed;}
 
   .fc-table{overflow-x:auto;}
   .fc-table table{border-collapse:collapse;width:100%;font-size:12px;}
@@ -464,11 +468,12 @@
 <script>
 /* ================= 共通ユーティリティ ================= */
 const ICONS = ['ti-home','ti-tools-kitchen-2','ti-bus','ti-shopping-cart','ti-users','ti-bolt','ti-flame','ti-droplet','ti-dots',
-  'ti-cash','ti-gift','ti-heart','ti-medical-cross','ti-plane','ti-device-gamepad-2','ti-shirt','ti-paw',
+  'ti-cash','ti-gift','ti-heart','ti-medical-cross','ti-plane','ti-device-gamepad-2','ti-shirt',
   'ti-book','ti-coffee','ti-baby-carriage','ti-phone','ti-wifi',
   'ti-car','ti-train','ti-bike','ti-gas-station','ti-building-bank','ti-wallet','ti-receipt','ti-shopping-bag',
-  'ti-pizza','ti-burger','ti-cake','ti-briefcase','ti-school','ti-stethoscope','ti-pill','ti-dog',
-  'ti-cat','ti-umbrella','ti-movie','ti-music','ti-camera','ti-scissors'];
+  'ti-pizza','ti-burger','ti-cake','ti-briefcase','ti-school','ti-stethoscope','ti-pill',
+  'ti-umbrella','ti-movie','ti-music','ti-camera','ti-scissors',
+  'ti-armchair','ti-bed','ti-bath','ti-plant','ti-recycle','ti-tool','ti-parking','ti-credit-card','ti-building-store','ti-first-aid-kit'];
 
 // 光熱費（季節で変動しやすいカテゴリ）は、集計画面でタップすると前年比較グラフを表示する
 const YEAR_COMPARE_CATEGORIES = ['電気代','ガス代','水道代'];
@@ -484,6 +489,31 @@ function showToast(msg){
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// 保存ボタンの二重クリック対策：クリック直後にボタンを押せなくし、文字も「保存中…」に変える。
+// 通信が終わったら（成功でも失敗でも）元の見た目に戻す。
+function runSaving(btn, promise){
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add('btn-saving');
+  btn.textContent = '保存中…';
+  const restore = ()=>{
+    btn.disabled = false;
+    btn.classList.remove('btn-saving');
+    btn.textContent = original;
+  };
+  promise.then(restore, restore);
+  return promise;
+}
+
+// 月送りボタン（‹ ›）の連打対策：通信中はボタン自体を押せなくする。
+// （見た目が変わらないだけでなく、連打すると2ヶ月分進んでしまう実害もあるため）
+function runNav(btns, promise){
+  btns.forEach(b=>{ b.disabled = true; });
+  const restore = ()=>{ btns.forEach(b=>{ b.disabled = false; }); };
+  promise.then(restore, restore);
+  return promise;
 }
 
 function apiCall(action, payload){
@@ -877,7 +907,7 @@ function loadHistory(){
     paymentMethod: document.getElementById('filter-payment').value,
     keyword: document.getElementById('filter-keyword').value
   };
-  apiCall('getTransactions', params).then(data=>{
+  return apiCall('getTransactions', params).then(data=>{
     state.historyData = data;
     state.historyMonthKey = data.monthKey;
     renderHistory();
@@ -941,7 +971,7 @@ let pieChart=null, barChart=null;
 const PALETTE = ['#1f6f76','#e4572e','#f6b93b','#3867d6','#8854d0','#20bf6b','#eb3b5a','#0fb9b1','#a5b1c2'];
 
 function loadReport(){
-  apiCall('getReport', {monthKey: state.reportMonthKey}).then(data=>{
+  return apiCall('getReport', {monthKey: state.reportMonthKey}).then(data=>{
     state.reportData = data;
     state.reportMonthKey = data.monthKey;
     renderReport();
@@ -1257,15 +1287,27 @@ function bindEvents(){
 
   document.getElementById('confirm-btn').onclick = openCategoryOverlay;
 
-  document.getElementById('hist-prev').onclick = ()=>{ state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,-1); loadHistory(); };
-  document.getElementById('hist-next').onclick = ()=>{ state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,1); loadHistory(); };
+  document.getElementById('hist-prev').onclick = ()=>{
+    state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,-1);
+    runNav([document.getElementById('hist-prev'), document.getElementById('hist-next')], loadHistory());
+  };
+  document.getElementById('hist-next').onclick = ()=>{
+    state.historyMonthKey = shiftMonthKeyLocal(state.historyMonthKey,1);
+    runNav([document.getElementById('hist-prev'), document.getElementById('hist-next')], loadHistory());
+  };
   ['filter-category','filter-member','filter-payment'].forEach(id=>{
     document.getElementById(id).onchange = loadHistory;
   });
   document.getElementById('filter-keyword').oninput = debounce(loadHistory, 300);
 
-  document.getElementById('report-prev').onclick = ()=>{ state.reportMonthKey = shiftMonthKeyLocal(state.reportMonthKey,-1); loadReport(); };
-  document.getElementById('report-next').onclick = ()=>{ state.reportMonthKey = shiftMonthKeyLocal(state.reportMonthKey,1); loadReport(); };
+  document.getElementById('report-prev').onclick = ()=>{
+    state.reportMonthKey = shiftMonthKeyLocal(state.reportMonthKey,-1);
+    runNav([document.getElementById('report-prev'), document.getElementById('report-next')], loadReport());
+  };
+  document.getElementById('report-next').onclick = ()=>{
+    state.reportMonthKey = shiftMonthKeyLocal(state.reportMonthKey,1);
+    runNav([document.getElementById('report-prev'), document.getElementById('report-next')], loadReport());
+  };
   document.getElementById('report-tab').onclick = (e)=>{
     const btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -1311,7 +1353,8 @@ function bindEvents(){
 
   document.getElementById('closing-save-btn').onclick = ()=>{
     const v = document.getElementById('closing-day-select').value;
-    apiCall('updateSettings', {closingDay: v===''? null : Number(v)}).then(res=>{
+    const btn = document.getElementById('closing-save-btn');
+    runSaving(btn, apiCall('updateSettings', {closingDay: v===''? null : Number(v)})).then(res=>{
       state.settings = res;
       showToast('締め日を保存しました');
       backToSettingsMenu();
@@ -1328,7 +1371,8 @@ function bindEvents(){
 
   document.getElementById('budget-save-btn').onclick = ()=>{
     const amount = Number(document.getElementById('budget-amount-input').value)||0;
-    apiCall('setMonthlyBudget', {monthKey: state.inputMonthKey, amount}).then(res=>{
+    const btn = document.getElementById('budget-save-btn');
+    runSaving(btn, apiCall('setMonthlyBudget', {monthKey: state.inputMonthKey, amount})).then(res=>{
       state.txCache.summary = res.summary;
       renderSummary();
       document.getElementById('overlay-budget').classList.remove('show');
@@ -1347,7 +1391,8 @@ function bindEvents(){
       amount: Number(document.getElementById('edit-amount').value),
       memo: document.getElementById('edit-memo').value
     };
-    apiCall('updateTransaction', payload).then(res=>{
+    const btn = document.getElementById('edit-save-btn');
+    runSaving(btn, apiCall('updateTransaction', payload)).then(res=>{
       document.getElementById('overlay-tx-edit').classList.remove('show');
       showToast('更新しました');
       loadHistory();
@@ -1383,7 +1428,8 @@ function bindEvents(){
     };
     if(!payload.name){ showToast('名称を入力してください'); return; }
     const action = state.editingCategoryId ? 'updateCategory' : 'addCategory';
-    apiCall(action, payload).then(res=>{
+    const btn = document.getElementById('cat-save-btn');
+    runSaving(btn, apiCall(action, payload)).then(res=>{
       state.masters = res;
       document.getElementById('overlay-category-edit').classList.remove('show');
       renderCategorySettings(); renderCategoryGrid();
@@ -1412,7 +1458,8 @@ function bindEvents(){
     };
     if(!payload.name){ showToast('名称を入力してください'); return; }
     const action = state.editingFixedCostId ? 'updateFixedCost' : 'addFixedCost';
-    apiCall(action, payload).then(()=>{
+    const btn = document.getElementById('fc-save-btn');
+    runSaving(btn, apiCall(action, payload)).then(()=>{
       document.getElementById('overlay-fixedcost-edit').classList.remove('show');
       renderFixedCostTable();
       showToast('保存しました');
