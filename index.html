@@ -1105,6 +1105,14 @@ function renderIconPicker(){
 }
 
 /* ================= 設定：固定費 ================= */
+function fillFcPaymentFilter(){
+  const sel = document.getElementById('fc-filter-payment');
+  const current = sel.value;
+  while(sel.options.length>1) sel.remove(1);
+  state.masters.paymentMethods.forEach(p=>sel.add(new Option(p.name, p.name)));
+  sel.value = current;
+}
+
 function renderFixedCostTable(){
   const filterPayment = document.getElementById('fc-filter-payment').value;
   // 並び替え（▲▼）は、全件の表示順を組み直す都合上、絞り込みをしていない「すべて」表示の時だけ有効にする
@@ -1267,7 +1275,7 @@ function openSettingsSub(name){
   document.getElementById('settings-menu').style.display='none';
   document.getElementById('sub-'+name).style.display='block';
   if(name==='category'){ renderCategorySettings(); }
-  if(name==='fixedcost'){ renderFixedCostTable(); }
+  if(name==='fixedcost'){ fillFcPaymentFilter(); renderFixedCostTable(); }
   if(name==='member'){ renderMemberList(); }
   if(name==='payment'){ renderPaymentList(); }
   if(name==='closing'){ renderClosingDaySelect(); }
