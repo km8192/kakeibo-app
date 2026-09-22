@@ -184,6 +184,11 @@
   .fc-table th{background:var(--accent-bg);color:var(--accent);}
   .fc-table td.item-name{color:var(--sub);}
   .fc-table tr.subtotal td{font-weight:700;background:#fafafa;}
+  .fc-cell{display:flex;align-items:center;justify-content:space-between;gap:4px;}
+  .fc-nav{display:flex;flex-direction:column;gap:1px;}
+  .fc-nav button{border:1px solid var(--border);background:#fff;border-radius:4px;font-size:9px;line-height:1;padding:2px 4px;color:var(--accent);}
+  .fc-nav button:disabled{opacity:.3;}
+  .fc-reorder-note{font-size:11px;color:var(--sub);margin-bottom:6px;}
 
   .icon-picker{display:flex;flex-wrap:wrap;gap:8px;}
   .icon-picker button{width:38px;height:38px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-size:18px;color:var(--accent);}
@@ -331,6 +336,7 @@
       <div class="filter-row">
         <select id="fc-filter-payment"><option value="">支払い方法：すべて</option></select>
       </div>
+      <div class="fc-reorder-note" id="fc-reorder-note"></div>
       <div class="fc-table"><div id="fc-table-wrap"></div></div>
       <button class="btn primary" id="fc-add-btn" style="margin-top:10px;">＋ 固定費を追加</button>
     </div>
@@ -1100,7 +1106,12 @@ function renderIconPicker(){
 
 /* ================= 設定：固定費 ================= */
 function renderFixedCostTable(){
-  apiCall('getFixedCosts', { paymentMethod: document.getElementById('fc-filter-payment').value }).then(data=>{
+  const filterPayment = document.getElementById('fc-filter-payment').value;
+  // 並び替え（▲▼）は、全件の表示順を組み直す都合上、絞り込みをしていない「すべて」表示の時だけ有効にする
+  const canReorder = !filterPayment;
+  document.getElementById('fc-reorder-note').textContent = canReorder ? '' : '※並び替えは「支払い方法：すべて」表示の時だけ行えます';
+
+  apiCall('getFixedCosts', { paymentMethod: filterPayment }).then(data=>{
     state.fixedCosts = data;
     const members = state.masters.members.map(m=>m.name);
     const byMember = {};
@@ -1112,7 +1123,19 @@ function renderFixedCostTable(){
     for(let i=0;i<maxRows;i++){
       html += '<tr>' + members.map(m=>{
         const item = byMember[m][i];
-        return item ? `<td class="item-name" data-fcid="${item.id}">${item.name}<br>${yen(item.amount)}</td>` : '<td></td>';
+        if(!item) return '<td></td>';
+        if(!canReorder){
+          return `<td class="item-name" data-fcid="${item.id}">${item.name}<br>${yen(item.amount)}</td>`;
+        }
+        const memberList = byMember[m];
+        const idx = memberList.indexOf(item);
+        return `<td class="item-name"><div class="fc-cell">
+          <span data-fcid="${item.id}">${item.name}<br>${yen(item.amount)}</span>
+          <span class="fc-nav">
+            <button type="button" data-fcnav="up" data-nav-fcid="${item.id}" ${idx===0?'disabled':''}>▲</button>
+            <button type="button" data-fcnav="down" data-nav-fcid="${item.id}" ${idx===memberList.length-1?'disabled':''}>▼</button>
+          </span>
+        </div></td>`;
       }).join('') + '</tr>';
     }
     html += '<tr class="subtotal">' + members.map(m=>`<td>小計 ${yen(data.subtotalsByMember[m]||0)}</td>`).join('') + '</tr>';
@@ -1120,14 +1143,35 @@ function renderFixedCostTable(){
     html += `<div style="text-align:right;margin-top:8px;font-weight:700;">合計 ${yen(data.total)}</div>`;
     const wrap = document.getElementById('fc-table-wrap');
     wrap.innerHTML = html;
-    wrap.querySelectorAll('[data-fcid]').forEach(td=>{
-      td.style.cursor = 'pointer';
-      td.onclick = ()=>{
-        const item = data.list.find(x=>x.id===td.dataset.fcid);
+    wrap.querySelectorAll('[data-fcid]').forEach(el=>{
+      el.style.cursor = 'pointer';
+      el.onclick = ()=>{
+        const item = data.list.find(x=>x.id===el.dataset.fcid);
         openFixedCostEdit(item);
       };
     });
+    wrap.querySelectorAll('[data-fcnav]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const item = data.list.find(x=>x.id===btn.dataset.navFcid);
+        reorderFixedCostItem(item, byMember, btn.dataset.fcnav==='up' ? -1 : 1);
+      };
+    });
   });
+}
+
+// 固定費の並び替え：同じ「誰の」列の中で一つ上／下の項目と表示順を入れ替える
+// （表示順は全メンバー共通の1本の並びなので、全体の並びの中でこの2件だけを入れ替える）
+function reorderFixedCostItem(item, byMember, dir){
+  const memberList = byMember[item.member];
+  const idx = memberList.indexOf(item);
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= memberList.length) return;
+  const neighbor = memberList[newIdx];
+  const ids = state.fixedCosts.list.map(x=>x.id);
+  const i1 = ids.indexOf(item.id), i2 = ids.indexOf(neighbor.id);
+  const tmp = ids[i1]; ids[i1] = ids[i2]; ids[i2] = tmp;
+  const navBtns = Array.from(document.querySelectorAll('#fc-table-wrap [data-fcnav]'));
+  runNav(navBtns, apiCall('reorderFixedCosts', {ids})).then(()=>{ renderFixedCostTable(); });
 }
 
 function openFixedCostEdit(item){
