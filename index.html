@@ -522,6 +522,19 @@ function runNav(btns, promise){
   return promise;
 }
 
+function apiRequestOnce(url, action, payload){
+  return fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({action, payload: payload||{}})
+  }).then(r=>r.json()).then(res=>{
+    if(!res.ok) throw new Error(res.error||'エラーが発生しました');
+    return res.data;
+  });
+}
+
+// Apps Scriptの応答が遅い・途中で切れるなどで通信が失敗した時のために、
+// 少し（0.8秒）待ってから自動で1回だけ再試行してから諦める。
 function apiCall(action, payload){
   const url = getApiUrl();
   if(!url){
@@ -530,17 +543,12 @@ function apiCall(action, payload){
     showToast('接続設定でURLを入力してください');
     return Promise.reject(new Error('APIURL未設定'));
   }
-  return fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action, payload: payload||{}})
-  }).then(r=>r.json()).then(res=>{
-    if(!res.ok) throw new Error(res.error||'エラーが発生しました');
-    return res.data;
-  }).catch(err=>{
-    showToast('通信エラー：' + err.message);
-    throw err;
-  });
+  return apiRequestOnce(url, action, payload)
+    .catch(()=> new Promise(r=>setTimeout(r, 800)).then(()=>apiRequestOnce(url, action, payload)))
+    .catch(err=>{
+      showToast('通信エラー：' + err.message);
+      throw err;
+    });
 }
 
 /* ================= アプリ状態 ================= */
