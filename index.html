@@ -1014,15 +1014,28 @@ function setChange(id, rate, expenseLike){
   el.className = 'kpi-change ' + cls;
 }
 
+// 円グラフの色を「金額が多い順」ではなく、カテゴリ・メンバー・支払い方法それぞれの
+// 登録順（表示順）を基準に決める。これにより、月によって金額の順位が変わっても
+// 同じ項目は常に同じ色で表示される。
+function stableColorIndex(tab, label){
+  let list;
+  if(tab==='category') list = state.masters.categories.filter(c=>c.type==='支出').map(c=>c.name);
+  else if(tab==='member') list = state.masters.members.map(m=>m.name);
+  else list = state.masters.paymentMethods.map(p=>p.name);
+  const idx = list.indexOf(label);
+  return idx>=0 ? idx : 0;
+}
+
 function renderPie(){
   const d = state.reportData;
   const src = d['by' + state.reportTab.charAt(0).toUpperCase() + state.reportTab.slice(1)];
   const ctx = document.getElementById('pie-chart');
   const total = src.reduce((s,x)=>s+x.amount,0);
+  const colors = src.map(x=>PALETTE[stableColorIndex(state.reportTab, x.label) % PALETTE.length]);
   if(pieChart) pieChart.destroy();
   pieChart = new Chart(ctx, {
     type:'pie',
-    data:{ labels: src.map(x=>x.label), datasets:[{ data: src.map(x=>x.amount), backgroundColor: PALETTE }] },
+    data:{ labels: src.map(x=>x.label), datasets:[{ data: src.map(x=>x.amount), backgroundColor: colors }] },
     options:{ plugins:{ legend:{ display:false } } }
   });
   const legend = document.getElementById('pie-legend');
@@ -1032,7 +1045,7 @@ function renderPie(){
     const row = document.createElement('div');
     row.className = 'legend-item' + (isYearCompare ? ' legend-item-tappable' : '');
     const rate = total>0 ? Math.round(x.amount/total*100) : 0;
-    row.innerHTML = `<span><span class="legend-dot" style="background:${PALETTE[i%PALETTE.length]}"></span>${x.label}${isYearCompare?' <i class="ti ti-chart-bar legend-hint-icon"></i>':''}</span><span>${yen(x.amount)}（${rate}%）</span>`;
+    row.innerHTML = `<span><span class="legend-dot" style="background:${colors[i]}"></span>${x.label}${isYearCompare?' <i class="ti ti-chart-bar legend-hint-icon"></i>':''}</span><span>${yen(x.amount)}（${rate}%）</span>`;
     if(isYearCompare){
       row.onclick = ()=>openYearCompareOverlay(x.label);
     }

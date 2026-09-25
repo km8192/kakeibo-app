@@ -395,10 +395,9 @@ function computeSummaryForMonth(monthKey) {
     return d.getTime() >= range.startDate.getTime() && d.getTime() <= range.endDate.getTime();
   });
 
-  var income = 0, expense = 0;
+  var income = 0;
   txRows.forEach(function (r) {
-    var amt = Number(r['金額']) || 0;
-    if (r['種別'] === '収入') income += amt; else expense += amt;
+    if (r['種別'] === '収入') income += Number(r['金額']) || 0;
   });
 
   var fixedCostTotal = 0;
@@ -406,10 +405,15 @@ function computeSummaryForMonth(monthKey) {
     fixedCostTotal += Number(r['金額（月）']) || 0;
   });
 
+  // 支出＝「固定費に一致しない実際の支出」＋「登録済みの固定費合計」。
+  // 家賃などを実際に取引として記録済みでも、その取引は固定費に一致するため
+  // variableExpenseの時点で除外され、代わりに固定費側の金額が使われるので二重計上にならない
+  var variableExpense = computeVariableExpense(txRows);
+  var expense = variableExpense + fixedCostTotal;
+
   var balance = income - expense;
   var availableBalance = income - fixedCostTotal;
 
-  var variableExpense = computeVariableExpense(txRows);
   var budgetRow = getSheetData(SHEETS.MONTHLY_BUDGET).rows.filter(function (r) { return normalizeYearMonthKey(r['年月']) === monthKey; })[0];
   var budgetAmount = budgetRow ? Number(budgetRow['金額']) || 0 : 0;
 
@@ -915,23 +919,37 @@ function apiGetReport(p) {
   }
 
   var range = fiscalMonthRangeForKey(monthKey, closingDay);
-  var txRows = getSheetData(SHEETS.TRANSACTIONS).rows.filter(function (r) {
+  var allExpenseRows = getSheetData(SHEETS.TRANSACTIONS).rows.filter(function (r) {
     var d = new Date(r['日付']);
     return d.getTime() >= range.startDate.getTime() && d.getTime() <= range.endDate.getTime() && r['種別'] === '支出';
   });
 
-  function groupBy(key) {
+  // カテゴリ別／誰が別／支払い方法別の内訳は、固定費に一致する取引を除外したうえで
+  // 固定費側の登録金額を合算する（支出の合計とグラフの内訳の合計が一致するように）
+  var fixedPairs = getFixedCostPairs();
+  var variableRows = allExpenseRows.filter(function (r) {
+    return !fixedPairs[r['カテゴリ'] + '|' + r['誰が']];
+  });
+  var fixedCosts = getSheetData(SHEETS.FIXED_COSTS).rows;
+
+  function groupBy(txKey, fcKey) {
     var map = {};
-    txRows.forEach(function (r) {
-      var k = r[key];
+    variableRows.forEach(function (r) {
+      var k = r[txKey];
       map[k] = (map[k] || 0) + (Number(r['金額']) || 0);
     });
+    fixedCosts.forEach(function (r) {
+      var k = r[fcKey];
+      map[k] = (map[k] || 0) + (Number(r['金額（月）']) || 0);
+    });
     return Object.keys(map).map(function (k) { return { label: k, amount: map[k] }; })
+      .filter(function (x) { return x.amount !== 0; })
       .sort(function (a, b) { return b.amount - a.amount; });
   }
 
   var dailyMap = {};
-  txRows.forEach(function (r) {
+  // 日別の推移は特定の日付を持たない固定費を含められないため、実際に記録した取引のみで作る
+  allExpenseRows.forEach(function (r) {
     var d = formatDate(r['日付']);
     dailyMap[d] = (dailyMap[d] || 0) + (Number(r['金額']) || 0);
   });
@@ -952,9 +970,9 @@ function apiGetReport(p) {
     incomeChangeRate: pctChange(current.income, prev.income),
     expenseChangeRate: pctChange(current.expense, prev.expense),
     balanceChangeRate: pctChange(current.balance, prev.balance),
-    byCategory: groupBy('カテゴリ'),
-    byMember: groupBy('誰が'),
-    byPaymentMethod: groupBy('支払い方法'),
+    byCategory: groupBy('カテゴリ', '紐づけるカテゴリ'),
+    byMember: groupBy('誰が', '誰の'),
+    byPaymentMethod: groupBy('支払い方法', '支払い方法'),
     dailyTrend: dailyTrend
   };
 }
