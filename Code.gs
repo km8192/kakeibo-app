@@ -819,8 +819,16 @@ function apiSetMonthlyBudget(p) {
     updateRowByHeaders(SHEETS.MONTHLY_BUDGET, row.__row, { '年月': p.monthKey, '金額': amount });
     row['金額'] = amount;
   } else {
-    appendRowByHeaders(SHEETS.MONTHLY_BUDGET, { '年月': p.monthKey, '金額': amount });
-    data.rows.push({ '年月': p.monthKey, '金額': amount, __row: data.rows.length + 2 });
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.MONTHLY_BUDGET);
+    var newRowNumber = sheet.getLastRow() + 1;
+    // 「年月」列（例:"2026-10"）はプレーンテキスト形式を明示してから書き込まないと、
+    // スプレッドシート側で日付や数値式として自動変換されてしまい、次回以降この月を
+    // 検索しても一致しなくなる（＝保存したはずの予算が「未設定」に戻って見える）ため、
+    // 書き込む直前に毎回セルの形式をプレーンテキストに固定する
+    sheet.getRange(newRowNumber, 1).setNumberFormat('@').setValue(p.monthKey);
+    sheet.getRange(newRowNumber, 2).setValue(amount);
+    delete _sheetDataCache[SHEETS.MONTHLY_BUDGET];
+    data.rows.push({ '年月': p.monthKey, '金額': amount, __row: newRowNumber });
   }
   // 書き込み直後にもう一度シートを読み直さずに済むよう、メモリ上のキャッシュを更新済みの内容で復元する
   // （updateRowByHeaders/appendRowByHeadersが書き込み後にキャッシュを削除するため）
